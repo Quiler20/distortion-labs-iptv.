@@ -1,11 +1,10 @@
 name: Build Distortion Labs IPTV APK
 
 on:
-  workflow_dispatch:
   push:
-    paths:
-      - 'distortion_labs_iptv.zip'
-      - '.github/workflows/build-apk.yml'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,83 +14,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar repositorio
+      - name: Descargar proyecto
         uses: actions/checkout@v4
 
-      - name: Instalar Java
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      - name: Instalar Android SDK
+      - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Instalar Flutter
-        uses: subosito/flutter-action@v2
         with:
-          channel: stable
-          cache: true
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: true
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
 
-      - name: Instalar Android API 36
+      - name: Dar permisos a Gradle
         run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Extraer proyecto
-        run: |
-          mkdir -p src
-          unzip -o distortion_labs_iptv.zip -d src
-          echo "Contenido del ZIP:"
-          find src -name pubspec.yaml
-
-      - name: Encontrar proyecto Flutter
-        id: project
-        shell: bash
-        run: |
-          FILE=$(find src -name pubspec.yaml -print -quit)
-
-          if [ -z "$FILE" ]; then
-            echo "ERROR: No se encontró pubspec.yaml dentro del ZIP"
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+          elif [ -f gradle ]; then
+            echo "ERROR: No se encontró el archivo gradlew"
             exit 1
-          fi
-
-          DIR=$(dirname "$FILE")
-          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-          echo "Proyecto encontrado en: $DIR"
-
-      - name: Crear estructura Android
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          flutter create --org com.distortionlabs --project-name distortion_labs_iptv .
-
-      - name: Configurar Android API 36
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
-          if [ -f "android/app/build.gradle.kts" ]; then
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
-          elif [ -f "android/app/build.gradle" ]; then
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
           else
-            echo "ERROR: No se encontró el archivo Gradle de Android"
+            echo "ERROR: Falta el Gradle Wrapper"
             exit 1
           fi
-
-          grep -n 'compileSdk' android/app/build.gradle* || true
-
-      - name: Descargar dependencias
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter pub get
 
       - name: Compilar APK
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: flutter build apk --release
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: distortion-labs-iptv-apk
-          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+          name: Distortion-Labs-IPTV-APK
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 7
           

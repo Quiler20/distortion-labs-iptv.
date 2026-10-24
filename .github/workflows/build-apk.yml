@@ -1,0 +1,71 @@
+
+name: Build Distortion Labs IPTV APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'distortion_labs_iptv.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Extraer proyecto
+        run: |
+          mkdir -p src
+          unzip distortion_labs_iptv.zip -d src
+          echo "Contenido del ZIP:"
+          find src -maxdepth 3 -type f | head -80
+
+      - name: Encontrar proyecto Flutter
+        id: project
+        run: |
+          FILE=$(find src -name pubspec.yaml -print -quit)
+          if [ -z "$FILE" ]; then
+            echo "No se encontró pubspec.yaml dentro del ZIP"
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Crear estructura Android
+        run: |
+          cd "${{ steps.project.outputs.dir }}"
+          flutter create --org com.distortionlabs --project-name distortion_labs_iptv .
+
+      - name: Descargar dependencias
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter pub get
+
+      - name: Compilar APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: flutter build apk --release
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: distortion-labs-iptv-apk
+          path: ${{ steps.project.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          
